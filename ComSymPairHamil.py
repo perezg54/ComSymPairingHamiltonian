@@ -157,7 +157,7 @@ def commutator(a,b):
   return dot(a,b) - dot(b,a)
 
 # derivative / right-hand side of the flow equation
-def derivative(y, t, dim):
+def derivative(y, t, real, dim):
 
   # reshape the solution vector into a dim x dim matrix
   H = reshape(y, (dim, dim))
@@ -167,14 +167,17 @@ def derivative(y, t, dim):
 
   # ... and construct off-diagonal the Hamiltonian
   Hod = H-Hd
-
+  
   # calculate the generator
-  eta = commutator(Hd, Hod)
-
+  if real == True:
+      eta = commutator(Hd.real, Hod.real)-commutator(Hd.imag,Hod.imag)
+  else:
+      eta= commutator(Hd.real,Hod.imag)+commutator(Hd.imag,Hod.real)
+    
   # dH is the derivative in matrix form 
   dH  = commutator(eta, H)
-
-  # convert dH into a linear array for the ODE solver
+    
+      # convert dH into a linear array for the ODE solver
   dydt = reshape(dH, -1)
     
   return dydt
@@ -203,7 +206,7 @@ def main():
 
   # integrate flow equations - odeint returns an array of solutions,
   # which are 1d arrays themselves
-  ys  = odeint(derivative, y0, flowparams, args=(dim,))
+  ys  = odeint(derivative, y0, flowparams, args=(True,dim,))
   print(ys)
   # reshape individual solution vectors into dim x dim Hamiltonian
   # matrices
