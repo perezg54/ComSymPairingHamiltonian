@@ -173,6 +173,7 @@ def derivative(y, t, real, dim):
       eta = commutator(Hd.real, Hod.real)-commutator(Hd.imag,Hod.imag)
   else:
       eta= commutator(Hd.real,Hod.imag)+commutator(Hd.imag,Hod.real)
+      # note zero if any arguement is zero
     
   # dH is the derivative in matrix form 
   dH  = commutator(eta, H)
@@ -206,22 +207,33 @@ def main():
 
   # integrate flow equations - odeint returns an array of solutions,
   # which are 1d arrays themselves
-  ys  = odeint(derivative, y0, flowparams, args=(True,dim,))
-  print(ys)
+  ysreal  = odeint(derivative, y0.real, flowparams, args=(True,dim,))
+  print(ysreal)
+  
+  ysimag  = odeint(derivative, y0.imag, flowparams, args=(False,dim,))
+  print(ysimag)
   # reshape individual solution vectors into dim x dim Hamiltonian
   # matrices
-  Hs  = reshape(ys, (-1, dim,dim))
+  Hs  = reshape(ysreal, (-1, dim,dim))+reshape(ysimag, (-1, dim,dim))
 
   # print Hs[-1]
   # print eigvalsh(Hs[-1])
 
   data = []
   for h in Hs:
-    data.append(diag(h))
+    data.append(diag(h).real)
   data = zip(*data)
-
-  plot_diagonals(data, eigenvalues, flowparams, delta, g)
-  plot_snapshots(Hs, flowparams, delta, g)
+  
+  plot_diagonals(data, eigenvalues.real, flowparams, delta, g)
+  plot_snapshots(Hs.real, flowparams, delta, g)
+  
+  data = []
+  for h in Hs:
+    data.append(diag(h).imag)
+  data = zip(*data)
+  
+  plot_diagonals(data, eigenvalues.imag, flowparams, delta, g)
+  plot_snapshots(Hs.imag, flowparams, delta, g)
 
 #------------------------------------------------------------------------------
 # make executable
