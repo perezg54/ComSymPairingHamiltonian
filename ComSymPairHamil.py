@@ -23,7 +23,7 @@ from mpl_toolkits.axes_grid1 import AxesGrid, make_axes_locatable
 
 import numpy as np
 from numpy import array, dot, diag, reshape
-from scipy.linalg import eigvalsh
+from scipy.linalg import eigvals
 from scipy.integrate import odeint
 
 #------------------------------------------------------------------------------
@@ -112,10 +112,10 @@ def plot_snapshots(Hs, flowparams, delta, g):
         right='off'
         )
   
-        grid[s].set_xticks([0,1,2,3,4,5])
-        grid[s].set_yticks([0,1,2,3,4,5])
-        grid[s].set_xticklabels(['$0$','$1$','$2$','$3$','$4$','$5$'])
-        grid[s].set_yticklabels(['$0$','$1$','$2$','$3$','$4$','$5$'])
+        grid[s].set_xticks([0,1])
+        grid[s].set_yticks([0,1])
+        grid[s].set_xticklabels(['$0$','$1$'])
+        grid[s].set_yticklabels(['$0$','$1$'])
 
         cbar = grid.cbar_axes[0]
         plt.colorbar(img, cax=cbar, 
@@ -157,11 +157,20 @@ def commutator(a,b):
   return dot(a,b) - dot(b,a)
 
 # derivative / right-hand side of the flow equation
-def derivative(y, t, real, dim):
-
+def derivative(yreal, t, real, yimag, dim):
+  
   # reshape the solution vector into a dim x dim matrix
-  H = reshape(y, (dim, dim))
+  if real == True:
+      Hr  = reshape(yreal, (dim, dim))
 
+      Hi  = reshape(yimag, (dim, dim))
+  elif real ==False:
+      Hr  = reshape(yimag, (dim, dim))
+
+      Hi  = reshape(yreal, (dim, dim))
+  
+  H  = Hr+1.0j*Hi
+    
   # extract diagonal Hamiltonian...
   Hd  = diag(diag(H))
 
@@ -171,18 +180,36 @@ def derivative(y, t, real, dim):
   # calculate the generator
   if real == True:
       eta = commutator(Hd.real, Hod.real)-commutator(Hd.imag,Hod.imag)
-  else:
+      # dH is the derivative in matrix form 
+      dH  = commutator(eta, Hr)
+  elif real == False:
       eta= commutator(Hd.real,Hod.imag)+commutator(Hd.imag,Hod.real)
       # note zero if any arguement is zero
-    
-  # dH is the derivative in matrix form 
-  dH  = commutator(eta, H)
-    
+      # dH is the derivative in matrix form 
+      dH  = commutator(eta, Hi)
       # convert dH into a linear array for the ODE solver
   dydt = reshape(dH, -1)
-    
+  
   return dydt
 
+def check_eigenvalues(H0, Hsr, Hsi, epsilon):
+    status=[]
+    i=0
+    eigenvalue_differences=[]
+    while i<len(Hsr):
+        eigenvalues=abs(eigvals(H0)-(eigvals(Hsr[-1])+1j*eigvals(Hsi[-1])))
+        k=0
+        current_status=[]
+        while k<len(eigenvalues):
+            if eigenvalues[k].real<epsilon and eigenvalues[k].imag<epsilon:
+                current_status.append(True)
+            else:
+                current_status.append(False)
+            k=k+1
+        status.append(current_status)
+        eigenvalue_differences.append(eigenvalues)
+        i=i+1
+    print status
 
 
 #------------------------------------------------------------------------------
@@ -193,48 +220,57 @@ def main():
   g     = 0.5
   delta = 1
 
-  H0    = Hamiltonian(delta, g)
+  H0    = array([[3, 1+0.5j],[1+0.5j,7+2j]])
   dim   = H0.shape[0]
-
+  
   # calculate exact eigenvalues
-  eigenvalues = eigvalsh(H0)
-
+  eigenvalues = eigvals(H0)
+  print(eigenvalues)
+  
   # turn initial Hamiltonian into a linear array
   y0  = reshape(H0, -1)                 
-
+  
   # flow parameters for snapshot images
   flowparams = array([0.,0.001,0.01,0.05,0.1, 1., 5., 10.])
-
+  
   # integrate flow equations - odeint returns an array of solutions,
   # which are 1d arrays themselves
-  ysreal  = odeint(derivative, y0.real, flowparams, args=(True,dim,))
-  print(ysreal)
+  ysreal  = odeint(derivative,  y0.real,flowparams, args=(True,y0.imag,dim,))
   
-  ysimag  = odeint(derivative, y0.imag, flowparams, args=(False,dim,))
-  print(ysimag)
+  ysimag  = odeint(derivative, y0.imag, flowparams, args=(False,y0.real,dim,))
+
   # reshape individual solution vectors into dim x dim Hamiltonian
   # matrices
-  Hs  = reshape(ysreal, (-1, dim,dim))+reshape(ysimag, (-1, dim,dim))
-
-  # print Hs[-1]
-  # print eigvalsh(Hs[-1])
+  Hsr  = reshape(ysreal, (-1, dim,dim))
+  Hsi  = reshape(ysimag, (-1, dim,dim))
+  Hs= Hsr+1j*Hsi
+  print(Hs)
+  
+  print (eigvals(Hsr[-1])+1j*eigvals(Hsi[-1]))
+  # note that the above gives a result consistent with the initial hamiltonian
+  # whereas the below does not
+  # print eigvals(Hs[-1])
 
   data = []
-  for h in Hs:
+  for h in Hsr:
     data.append(diag(h).real)
   data = zip(*data)
   
-  plot_diagonals(data, eigenvalues.real, flowparams, delta, g)
-  plot_snapshots(Hs.real, flowparams, delta, g)
+#  plot_diagonals(data, eigenvalues.real, flowparams, delta, g)
+#  plot_snapshots(Hsr, flowparams, delta, g)
   
   data = []
-  for h in Hs:
-    data.append(diag(h).imag)
+  for h in Hsi:
+    data.append(diag(h))
   data = zip(*data)
   
-  plot_diagonals(data, eigenvalues.imag, flowparams, delta, g)
-  plot_snapshots(Hs.imag, flowparams, delta, g)
-
+#  plot_diagonals(data, eigenvalues.imag, flowparams, delta, g)
+#  plot_snapshots(Hsi, flowparams, delta, g)
+  
+  # stricter test on consistency of eigenvalues during SRG 
+  # gives True if both the real and imaginary part agree with the eigvals of
+  # H0 within epsilon
+  check_eigenvalues(H0,Hsr,Hsi,0.1)
 #------------------------------------------------------------------------------
 # make executable
 #------------------------------------------------------------------------------
