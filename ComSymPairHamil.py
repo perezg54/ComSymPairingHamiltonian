@@ -42,7 +42,7 @@ def myPlotSettings(ax, formatter):
     ax.tick_params(axis='both',width=2,length=10,labelsize=20)
     for s in ['left', 'right', 'top', 'bottom']:
         ax.spines[s].set_linewidth(2)
-    ax.set_xlim([0.0007,13])  
+    ax.set_xlim([0.0007,13000])  
     return
 
 #------------------------------------------------------------------------------
@@ -63,18 +63,18 @@ def plot_diagonals(data, eigenvalues, flowparams, delta, g):
 
     myPlotSettings(ax, formatter)
 
-    plt.savefig("srg_pairing_diag_delta%2.1f_g%2.1f.pdf"%(delta, g), bbox_inches="tight", pad_inches=0.05)
+#    plt.savefig("srg_pairing_diag_delta%2.1f_g%2.1f.pdf"%(delta, g), bbox_inches="tight", pad_inches=0.05)
     plt.show()
 
     # difference between diagonals and eigenvalues
-    fig, ax = plt.subplots()
+    """fig, ax = plt.subplots()
     for i in range(dim):
         plot_diff = plt.semilogx(flowparams, data[i]-eigenvalues[i], color=cols[i], linestyle='solid', marker=markers[i], markersize=10)
 
     myPlotSettings(ax, formatter)
 
     plt.savefig("srg_pairing_diag-eval_delta%2.1f_g%2.1f.pdf"%(delta, g), bbox_inches="tight", pad_inches=0.05)
-    plt.show()
+    plt.show()"""
     return
 
 #------------------------------------------------------------------------------
@@ -112,10 +112,10 @@ def plot_snapshots(Hs, flowparams, delta, g):
         right=False
         )
   
-        grid[s].set_xticks([0,1])
-        grid[s].set_yticks([0,1])
-        grid[s].set_xticklabels(['$0$','$1$'])
-        grid[s].set_yticklabels(['$0$','$1$'])
+        grid[s].set_xticks([0,1,2,3,4,5])
+        grid[s].set_yticks([0,1,2,3,4,5])
+        grid[s].set_xticklabels(['$0$','$1$','$2$','$3$','$4$','$5$'])
+        grid[s].set_yticklabels(['$0$','$1$','$2$','$3$','$4$','$5$'])
 
         cbar = grid.cbar_axes[0]
         plt.colorbar(img, cax=cbar, 
@@ -170,18 +170,18 @@ def commutator(a,b):
   return dot(a,b) - dot(b,a)
 
 # derivative / right-hand side of the flow equation
-def derivative(yreal, t, real, yimag, dim):
+def derivative(y1, t, real, y2, dim):
   
   # reshape the solution vector into a dim x dim matrix
   if real == True:
-      Hr  = reshape(yreal, (dim, dim))
+      Hr  = reshape(y1, (dim, dim))
 
-      Hi  = reshape(yimag, (dim, dim))
+      Hi  = reshape(y2, (dim, dim))
   # just implementation adjustments, not ideal but seems to function properly    
   elif real ==False:
-      Hr  = reshape(yimag, (dim, dim))
+      Hr  = reshape(y2, (dim, dim))
 
-      Hi  = reshape(yreal, (dim, dim))
+      Hi  = reshape(y1, (dim, dim))
   
   # constructs the full matrix again from the real and imaginary components  
   H  = Hr+1.0j*Hi
@@ -201,27 +201,28 @@ def derivative(yreal, t, real, yimag, dim):
   # the real diagonal portion
   a=1
   # the imaignary diagonal portion
-  b=1   
+  b=1
   # the real off-diagonal portion
   c=1
   # the imaginary off-diagonal portion
   d=1
   
   # calculate the generator
+  
+  # the real portion of the generator based on [Hdr + i*Hdi, Hodr + i*Hodi]
+  etareal = a*c*commutator(Hd.real, Hod.real)-b*d*commutator(Hd.imag,Hod.imag)
+  
+  # the imag portion of the generator based on [Hdr + i*Hdi, Hodr + i*Hodi]
+  etaimag = a*d*commutator(Hd.real,Hod.imag)+b*c*commutator(Hd.imag,Hod.real)
+  
   if real == True:
-      # the real portion of the generator based on [Hdr + i*Hdi, Hodr + i*Hodi]
-      eta = a*c*commutator(Hd.real, Hod.real)-b*d*commutator(Hd.imag,Hod.imag)
-      
-      # dH is the derivative in matrix form 
-      dH  = commutator(eta, Hr)
+#       dH is the derivative in matrix form 
+      dH  = commutator(etareal, Hr)-commutator(etaimag, Hi)
   elif real == False:
-      # the imag portion of the generator based on [Hdr + i*Hdi, Hodr + i*Hodi]
-      eta= a*d*commutator(Hd.real,Hod.imag)+b*c*commutator(Hd.imag,Hod.real)
-      
       # dH is the derivative in matrix form 
-      dH  = commutator(eta, Hi)
-      # convert dH into a linear array for the ODE solver
-      
+      dH  = commutator(etareal, Hi)+commutator(etaimag, Hr)
+#      dH = commutator(etaimag,Hi)
+  # convert dH into a linear array for the ODE solver  
   dydt = reshape(dH, -1)
   
   return dydt
@@ -233,11 +234,11 @@ def check_eigenvalues(H0, Hsr, Hsi, epsilon):
     while i<len(Hsr):
         # computes the difference between the original eigenvalues and
         # the evolved ones
-        eigenvalues=abs(eigvals(H0)-(eigvals(Hsr[-1])+1j*eigvals(Hsi[-1])))
+#        eigenvalues=abs(eigvals(H0)-(eigvals(Hsr[-1])+1j*eigvals(Hsi[-1])))
         
         k=0
-        current_status=[]
-        while k<len(eigenvalues):
+        current_status=eigvals(Hsr[i]+1j*Hsi[i])
+        """while k<len(eigenvalues):
             # checks if for both the real and imaginary components,
             # the eigen values are within epsilon of each other
             if eigenvalues[k].real<epsilon and eigenvalues[k].imag<epsilon:
@@ -246,13 +247,14 @@ def check_eigenvalues(H0, Hsr, Hsi, epsilon):
                 current_status.append(False)
             
             k=k+1
-        
+        """
         status.append(current_status)
-        eigenvalue_differences.append(eigenvalues)
+#        eigenvalue_differences.append(eigenvalues)
         
         i=i+1
     # reports a list informing if the eigenvalues varied more than epsilon.
     print status
+
 
 
 #------------------------------------------------------------------------------
@@ -261,13 +263,13 @@ def check_eigenvalues(H0, Hsr, Hsi, epsilon):
 
 def main():
   g     = 0.5
-  delta = 1
-  alpha= 0
+  delta = 1.0
+  alpha = 0.1
   
-  H0    = Hamiltonian(delta,g)
-#  H0    = Hamiltonian_Least_Bound(delta, g, alpha)
+  H0    = Hamiltonian_Least_Bound(delta, g, alpha)
+#  H0 = array([[1,1.0-1.j],[1-1.j,3+2.j]])
   dim   = H0.shape[0]
-  print H0
+  
   # calculate exact eigenvalues
   eigenvalues = eigvals(H0)
   print(eigenvalues)
@@ -276,25 +278,23 @@ def main():
   y0  = reshape(H0, -1)                 
   
   # flow parameters for snapshot images
-  flowparams = array([0.,0.001,0.01,0.05,0.1, 1., 5., 10.])
-  ysreal  = odeint(derivative,  y0.real,flowparams, args=(True,y0.imag,dim,))
-  print diag(reshape(ysreal, (-1, dim,dim))[-1])
+  flowparams = array([0.,0.001,0.01,0.05, 0.1, 1.,5., 10.,100.])
+  
   # integrate flow equations - odeint returns an array of solutions,
   # which are 1d arrays themselves
-"""  ysreal  = odeint(derivative,  y0.real,flowparams, args=(True,y0.imag,dim,))
+  ysreal  = odeint(derivative,  y0.real,flowparams, args=(True,y0.imag,dim,))
   
-  ysimag  = odeint(derivative,  y0.imag, flowparams, args=(False,y0.real,dim,))
+  ysimag  = odeint(derivative, y0.imag, flowparams, args=(False,y0.real,dim,))
 
   # reshape individual solution vectors into dim x dim Hamiltonian
   # matrices
   Hsr  = reshape(ysreal, (-1, dim,dim))
-#  print Hsr[-1]
-#  print H0
   Hsi  = reshape(ysimag, (-1, dim,dim))
   Hs= Hsr+1j*Hsi
   #print(Hs)
 
-  print diag(Hs[-1])
+#  print diag(Hs[-1])
+  print(eigvals(Hs[-1]))
   
   #print (eigvals(Hsr[-1])+1j*eigvals(Hsi[-1]))
   # note that the above gives a result consistent with the initial hamiltonian
@@ -320,8 +320,7 @@ def main():
   # stricter test on consistency of eigenvalues during SRG 
   # gives True if both the real and imaginary part agree with the eigvals of
   # H0 within epsilon
-  check_eigenvalues(H0,Hsr,Hsi,0.1)
-  """
+#  check_eigenvalues(H0,Hsr,Hsi,0.1)
 #------------------------------------------------------------------------------
 # make executable
 #------------------------------------------------------------------------------
