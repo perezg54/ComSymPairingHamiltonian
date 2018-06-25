@@ -42,7 +42,7 @@ def myPlotSettings(ax, formatter):
     ax.tick_params(axis='both',width=2,length=10,labelsize=20)
     for s in ['left', 'right', 'top', 'bottom']:
         ax.spines[s].set_linewidth(2)
-    ax.set_xlim([0.0007,13000])  
+    ax.set_xlim([0.0007,13])  
     return
 
 #------------------------------------------------------------------------------
@@ -97,8 +97,8 @@ def plot_snapshots(Hs, flowparams, delta, g):
         img = grid[s].imshow(Hs[s], 
                             cmap=plt.get_cmap('RdBu_r'),                                  # choose color map
                             interpolation='nearest',       
-                            norm=SymLogNorm(linthresh=1e-10,vmin=-0.5*g,vmax=10*delta),   # normalize 
-                            vmin=-0.5*g,                                                  # min/max values for data
+                            norm=SymLogNorm(linthresh=1e-10,vmin=-0.5*g.real,vmax=10*delta),   # normalize 
+                            vmin=-0.5*g.real,                                                  # min/max values for data
                             vmax=10*delta
                             )
 
@@ -112,10 +112,10 @@ def plot_snapshots(Hs, flowparams, delta, g):
         right=False
         )
   
-        grid[s].set_xticks([0,1,2,3,4,5])
-        grid[s].set_yticks([0,1,2,3,4,5])
-        grid[s].set_xticklabels(['$0$','$1$','$2$','$3$','$4$','$5$'])
-        grid[s].set_yticklabels(['$0$','$1$','$2$','$3$','$4$','$5$'])
+        grid[s].set_xticks([0,1,2])
+        grid[s].set_yticks([0,1,2])
+        grid[s].set_xticklabels(['$0$','$1$','$2$'])
+        grid[s].set_yticklabels(['$0$','$1$','$2$'])
 
         cbar = grid.cbar_axes[0]
         plt.colorbar(img, cax=cbar, 
@@ -129,7 +129,7 @@ def plot_snapshots(Hs, flowparams, delta, g):
         cbar.set_ylabel('$\mathrm{[a. u.]}$') 
 
 
-        plt.savefig("srg_pairing_delta%2.1f_g%2.1f.pdf"%(delta, g), bbox_inches="tight", pad_inches=0.05)
+        plt.savefig("srg_pairing_delta%2.1f_g%2.1f.pdf"%(delta, g.real), bbox_inches="tight", pad_inches=0.05)
     plt.show()
 
     return
@@ -165,12 +165,28 @@ def Hamiltonian_Least_Bound(delta, g, alpha):
     
     return H
 
+def Hamiltonian_n4_p3(delta,g,alpha):
+    H=array([[2*delta-g , -0.5*g , -0.5*g],
+             [-0.5*g , 4*delta-g-2j*alpha, -0.5*g],
+             [-0.5*g , -0.5*g , 6*delta-g-2j*alpha]]
+        )
+    
+    return H
+
+def Hamiltonian_n2_p3(delta,g,alpha):
+    H=array([[0 , 0 , 0],
+             [0 , 2*delta, 0],
+             [0 , 0, 4*delta-2.0j*alpha]]
+        )
+    
+    return H
+
 # commutator of matrices
 def commutator(a,b):
   return dot(a,b) - dot(b,a)
 
 # derivative / right-hand side of the flow equation
-def derivative(y1, t, real, y2, dim):
+def derivative(y1, t, real, y2, dim, params):
   
   # reshape the solution vector into a dim x dim matrix
   if real == True:
@@ -199,13 +215,13 @@ def derivative(y1, t, real, y2, dim):
   # of the hamiltonian
   
   # the real diagonal portion
-  a=1
+  a=params[0]
   # the imaignary diagonal portion
-  b=1
+  b=params[1]
   # the real off-diagonal portion
-  c=1
+  c=params[2]
   # the imaginary off-diagonal portion
-  d=1
+  d=params[3]
   
   # calculate the generator
   
@@ -229,15 +245,15 @@ def derivative(y1, t, real, y2, dim):
 
 def check_eigenvalues(H0, Hsr, Hsi, epsilon):
     status=[]
-    eigenvalue_differences=[]
+#    eigenvalue_differences=[]
     i=0
     while i<len(Hsr):
         # computes the difference between the original eigenvalues and
         # the evolved ones
 #        eigenvalues=abs(eigvals(H0)-(eigvals(Hsr[-1])+1j*eigvals(Hsi[-1])))
         
-        k=0
-        current_status=eigvals(Hsr[i]+1j*Hsi[i])
+#        k=0
+        current_status=(eigvals(Hsr[i]) +1.0j*eigvals(Hsi[i])).imag
         """while k<len(eigenvalues):
             # checks if for both the real and imaginary components,
             # the eigen values are within epsilon of each other
@@ -253,7 +269,7 @@ def check_eigenvalues(H0, Hsr, Hsi, epsilon):
         
         i=i+1
     # reports a list informing if the eigenvalues varied more than epsilon.
-    print status
+    print array(status)
 
 
 
@@ -262,14 +278,15 @@ def check_eigenvalues(H0, Hsr, Hsi, epsilon):
 #------------------------------------------------------------------------------
 
 def main():
-  g     = 0.5
+  g     = 0.5+0.1j
   delta = 1.0
-  alpha = 0.1
+  alpha = 0
   
   H0    = Hamiltonian_Least_Bound(delta, g, alpha)
+#  H0  = Hamiltonian_n4_p3(delta,g,alpha)
 #  H0 = array([[1,1.0-1.j],[1-1.j,3+2.j]])
   dim   = H0.shape[0]
-  
+
   # calculate exact eigenvalues
   eigenvalues = eigvals(H0)
   print(eigenvalues)
@@ -278,13 +295,14 @@ def main():
   y0  = reshape(H0, -1)                 
   
   # flow parameters for snapshot images
-  flowparams = array([0.,0.001,0.01,0.05, 0.1, 1.,5., 10.,100.])
+  flowparams = array([0.,0.001,0.01, 0.1, 1., 10.,100.,1000.])
   
+  params = [1.0, 0.0, 1.0, 1.0]
   # integrate flow equations - odeint returns an array of solutions,
   # which are 1d arrays themselves
-  ysreal  = odeint(derivative,  y0.real,flowparams, args=(True,y0.imag,dim,))
+  ysreal  = odeint(derivative,  y0.real,flowparams, args=(True,y0.imag,dim,params))
   
-  ysimag  = odeint(derivative, y0.imag, flowparams, args=(False,y0.real,dim,))
+  ysimag  = odeint(derivative, y0.imag, flowparams, args=(False,y0.real,dim,params))
 
   # reshape individual solution vectors into dim x dim Hamiltonian
   # matrices
@@ -294,9 +312,9 @@ def main():
   #print(Hs)
 
 #  print diag(Hs[-1])
-  print(eigvals(Hs[-1]))
+#  print(eigvals(Hs[-1]))
   
-  #print (eigvals(Hsr[-1])+1j*eigvals(Hsi[-1]))
+  print ((eigvals(Hsr[-1])+1j*eigvals(Hsi[-1])))
   # note that the above gives a result consistent with the initial hamiltonian
   # whereas the below does not
   # print eigvals(Hs[-1])
@@ -305,9 +323,9 @@ def main():
   for h in Hsr:
     data.append(diag(h).real)
   data = zip(*data)
-  
+  print(delta,g,alpha,params)
 #  plot_diagonals(data, eigenvalues.real, flowparams, delta, g)
-#  plot_snapshots(Hsr, flowparams, delta, g)
+  plot_snapshots(Hsr, flowparams, delta, g)
   
   data = []
   for h in Hsi:
@@ -315,7 +333,7 @@ def main():
   data = zip(*data)
   
 #  plot_diagonals(data, eigenvalues.imag, flowparams, delta, g)
-#  plot_snapshots(Hsi, flowparams, delta, g)
+  plot_snapshots(Hsi, flowparams, delta, g)
   
   # stricter test on consistency of eigenvalues during SRG 
   # gives True if both the real and imaginary part agree with the eigvals of
